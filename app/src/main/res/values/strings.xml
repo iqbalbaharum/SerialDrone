@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">SerialDrone</string>
+    <string name="action_settings">Settings</string>
+</resources>
