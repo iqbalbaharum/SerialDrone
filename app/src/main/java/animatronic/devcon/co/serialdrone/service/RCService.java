@@ -9,17 +9,23 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
 
+import java.nio.ByteBuffer;
+
 public class RCService extends Service {
 
     private final static String TAG = "RCSERVICE";
 
     public final static String KEY_DATA = "animatronic.devcon.co.serialdrone.KEY_DATA";
-    private final static int SEND_RAW_DATA_INTERVAL = 10;
+    private final static int SEND_RAW_DATA_INTERVAL = 50;
 
     private UsbService usbService;
     private byte[] mLoopedData;
 
     private Handler sendRawDataTask = new Handler();
+
+    public static final int DEFAULT_READ_BUFFER_SIZE = 16 * 1024;
+
+    private ByteBuffer mOutputBuffer = ByteBuffer.allocate(DEFAULT_READ_BUFFER_SIZE);
 
     private final ServiceConnection usbConnection = new ServiceConnection() {
         @Override
@@ -40,8 +46,7 @@ public class RCService extends Service {
 
     @Override
     public IBinder onBind(Intent intent) {
-        // TODO: Return the communication channel to the service.
-        throw new UnsupportedOperationException("Not yet implemented");
+        return null;
     }
 
     @Override
@@ -55,6 +60,8 @@ public class RCService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        // clear buffer
+        mOutputBuffer.clear();
 
         unbindService(usbConnection);
     }
@@ -77,6 +84,7 @@ public class RCService extends Service {
         public void run() {
 
             if(UsbService.SERVICE_CONNECTED) {
+                // insert
                 usbService.write(mLoopedData);
                 sendRawDataTask.postDelayed(sendRawDataRunnable, SEND_RAW_DATA_INTERVAL);
             }

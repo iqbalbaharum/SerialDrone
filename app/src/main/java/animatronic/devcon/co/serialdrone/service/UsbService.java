@@ -12,6 +12,7 @@ import android.hardware.usb.UsbManager;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.SystemClock;
 
 import com.felhr.usbserial.CDCSerialDevice;
 import com.felhr.usbserial.UsbSerialDevice;
@@ -36,7 +37,7 @@ public class UsbService extends Service {
     public static final int CTS_CHANGE = 1;
     public static final int DSR_CHANGE = 2;
     private static final String ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION";
-    private static final int BAUD_RATE = 9600; // BaudRate. Change this value if you need
+    private static final int BAUD_RATE = 115200; // BaudRate. Change this value if you need
     public static boolean SERVICE_CONNECTED = false;
 
     private IBinder binder = new UsbBinder();
@@ -49,6 +50,7 @@ public class UsbService extends Service {
     private UsbSerialDevice serialPort;
 
     private boolean serialPortConnected;
+
     /*
      *  Data received from serial port will be received here. Just populate onReceivedData with your code
      *  In this particular example. byte stream is converted to String and send to UI thread to
@@ -91,6 +93,17 @@ public class UsbService extends Service {
                 mHandler.obtainMessage(DSR_CHANGE).sendToTarget();
         }
     };
+
+    /***
+     * Check if buffer is overflow
+     */
+    private UsbSerialInterface.UsbOverrunCallback overrunCallback = new UsbSerialInterface.UsbOverrunCallback() {
+        @Override
+        public void onOverrunError() {
+            SystemClock.sleep(5000);
+        }
+    };
+
     /*
      * Different notifications from OS will be received here (USB attached, detached, permission responses...)
      * About BroadcastReceiver: http://developer.android.com/reference/android/content/BroadcastReceiver.html
@@ -164,8 +177,10 @@ public class UsbService extends Service {
      * This function will be called from MainActivity to write data through Serial Port
      */
     public void write(byte[] data) {
-        if (serialPort != null)
+        if (serialPort != null) {
             serialPort.write(data);
+        }
+
     }
 
     public void setHandler(Handler mHandler) {
@@ -253,6 +268,7 @@ public class UsbService extends Service {
                     serialPort.read(mCallback);
                     serialPort.getCTS(ctsCallback);
                     serialPort.getDSR(dsrCallback);
+                    serialPort.getOverrun(overrunCallback);
 
                     //
                     // Some Arduinos would need some sleep because firmware wait some time to know whether a new sketch is going
