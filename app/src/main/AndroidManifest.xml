@@ -10,6 +10,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <application
         android:allowBackup="true"
@@ -31,7 +32,7 @@
 
         <service
             android:name=".service.UsbService"
-            android:enabled="true"></service>
+            android:enabled="true"/>
         <service android:name="org.eclipse.paho.android.service.MqttService" />
         <service
             android:name=".service.RCService"

@@ -25,11 +25,12 @@ import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 
 import java.lang.ref.WeakReference;
+import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Set;
 
 import animatronic.devcon.co.serialdrone.adapter.LogAdapter;
 import animatronic.devcon.co.serialdrone.model.MLog;
-import animatronic.devcon.co.serialdrone.service.RCService;
 import animatronic.devcon.co.serialdrone.service.UsbService;
 
 public class MainActivity extends AppCompatActivity {
@@ -46,6 +47,40 @@ public class MainActivity extends AppCompatActivity {
     private final static String MQTT_TOPIC_CONTROL = "devcon/drone/control";
     private final static String MQTT_TOPIC_RESPOND = "devcon/drone/respond";
     private final static String MQTT_TOPIC_RC = "devcon/drone/rc";
+    private final static String MQTT_TOPIC_RC_OFF = "devcon/drone/rc/off";
+
+    private final static int MAX_BUFFER = 100;
+    private final static int RC_INTERVAL = 20;
+    public ArrayList<byte[]> outputBuffer = new ArrayList<>();
+    private boolean mBusy = false;
+
+    private LinearLayoutManager mLayoutManager;
+
+    private byte[] mPeriodicRCBuffer;
+    private Handler mRCHandler = new Handler();
+
+    private final Runnable mRCData = new Runnable() {
+        @Override
+        public void run() {
+
+            if(mPeriodicRCBuffer != null) {
+                outputBuffer.add(mPeriodicRCBuffer);
+
+                if(outputBuffer.size() > MAX_BUFFER) {
+                     while(outputBuffer.size() > MAX_BUFFER) {
+                        outputBuffer.remove(outputBuffer.size() - 1);
+                    }
+                }
+            }
+
+            if(!mBusy) {
+                mBusy = true;
+                processQueue();
+            }
+
+            mRCHandler.postDelayed(this, RC_INTERVAL);
+        }
+    };
 
     private final ServiceConnection usbConnection = new ServiceConnection() {
         @Override
@@ -57,6 +92,7 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onServiceDisconnected(ComponentName arg0) {
+            mRCHandler.removeCallbacks(mRCData);
             usbService = null;
             addLog("Service Disconnected");
         }
@@ -154,7 +190,10 @@ public class MainActivity extends AppCompatActivity {
     private void setupLogView() {
 
         RecyclerView recyclerView = (RecyclerView) findViewById(R.id.rv_log);
-        recyclerView.setLayoutManager(new LinearLayoutManager(getApplicationContext()));
+        mLayoutManager = new LinearLayoutManager(getApplicationContext());
+        mLayoutManager.setReverseLayout(true);
+        mLayoutManager.setStackFromEnd(true);
+        recyclerView.setLayoutManager(mLayoutManager);
         mAdapter = new LogAdapter(getApplicationContext());
 
         recyclerView.setAdapter(mAdapter);
@@ -162,6 +201,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void addLog(String desc) {
         mAdapter.add(new MLog(desc));
+        mLayoutManager.scrollToPositionWithOffset(0, 0);
     }
 
     /*
@@ -181,6 +221,7 @@ public class MainActivity extends AppCompatActivity {
                     byte[] data = (byte[]) msg.obj;
                     addLog("USB READ: " + new String(data));
                     publishMessage(data);
+                    processQueue();
                     break;
                 case UsbService.CTS_CHANGE:
                     addLog("CTS_CHANGE");
@@ -205,21 +246,37 @@ public class MainActivity extends AppCompatActivity {
             public void messageArrived(String topic, MqttMessage message) throws Exception {
                 if(topic.equalsIgnoreCase(MQTT_TOPIC_CONTROL)) {
                     addLog(MQTT_TOPIC_CONTROL + ": " + message.toString());
-                    if (usbService != null) { // if UsbService was correctly binded, Send data
-                        addLog("USB WRITE: " + message.toString());
-                        usbService.write(message.getPayload());
+                    if (usbService != null) {
+                        BigInteger bigInt = new BigInteger(1, message.getPayload());
+                        addLog("USB WRITE: " + bigInt.toString());
+                        outputBuffer.add(message.getPayload());
+                        mBusy = true;
+                        processQueue();
                     }
                 } else if(topic.equalsIgnoreCase(MQTT_TOPIC_RC)) {
                     addLog(MQTT_TOPIC_RC + ": " + message.toString());
-
-                    // stop running service
-                    Intent rcService = new Intent(getApplicationContext(), RCService.class);
-                    stopService(rcService);
-                    // create a new loop when there is data by passing the data
-                    if(message.getPayload().length != 0) {
-                        rcService.putExtra(RCService.KEY_DATA, message.getPayload());
-                        startService(rcService);
-                    }
+                    mPeriodicRCBuffer = message.getPayload();
+                    // restart handler
+                    mHandler.removeCallbacks(mRCData);
+                    mHandler.post(mRCData);
+//
+//                    // stop running service
+//                    Intent rcService = new Intent(getApplicationContext(), RCService.class);
+//                    stopService(rcService);
+//                    // create a new loop when there is data by passing the data
+//                    if(message.getPayload().length != 0) {
+//                        rcService.putExtra(RCService.KEY_DATA, message.getPayload());
+//                        startService(rcService);
+//                    }
+                } else if(topic.equalsIgnoreCase(MQTT_TOPIC_RC_OFF)) {
+                    addLog("OFF");
+                    mHandler.removeCallbacks(mRCData);
+                    // reset
+                    mPeriodicRCBuffer = null;
+                    outputBuffer = new ArrayList<>();
+                    outputBuffer.add(message.getPayload());
+                    mBusy = true;
+                    processQueue();
                 }
             }
 
@@ -236,6 +293,7 @@ public class MainActivity extends AppCompatActivity {
                 public void onSuccess(IMqttToken asyncActionToken) {
                     subscribe(MQTT_TOPIC_CONTROL);
                     subscribe(MQTT_TOPIC_RC);
+                    subscribe(MQTT_TOPIC_RC_OFF);
                     addLog("MQTT Connected");
                 }
 
@@ -275,7 +333,6 @@ public class MainActivity extends AppCompatActivity {
      */
     private void publishMessage(byte[] payload) {
         try {
-//            byte[] encodedPayload = payload.getBytes("UTF-8");
             MqttMessage mqttMessage = new MqttMessage(payload);
             mMQTTClient.publish(MQTT_TOPIC_RESPOND, mqttMessage);
             addLog(MQTT_TOPIC_RESPOND + ": " + mqttMessage.toString());
@@ -303,6 +360,20 @@ public class MainActivity extends AppCompatActivity {
             });
         } catch (MqttException e) {
             e.printStackTrace();
+        }
+    }
+
+    private void processQueue() {
+
+        if(outputBuffer.size() <= 0) {
+            mBusy = false;
+            return;
+        }
+
+        byte[] payload = outputBuffer.remove(0);
+
+        if(payload != null) {
+            usbService.write(payload);
         }
     }
 }

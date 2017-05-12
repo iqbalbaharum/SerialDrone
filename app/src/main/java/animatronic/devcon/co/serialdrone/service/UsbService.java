@@ -12,7 +12,6 @@ import android.hardware.usb.UsbManager;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
-import android.os.SystemClock;
 
 import com.felhr.usbserial.CDCSerialDevice;
 import com.felhr.usbserial.UsbSerialDevice;
@@ -37,7 +36,7 @@ public class UsbService extends Service {
     public static final int CTS_CHANGE = 1;
     public static final int DSR_CHANGE = 2;
     private static final String ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION";
-    private static final int BAUD_RATE = 115200; // BaudRate. Change this value if you need
+    private static final int BAUD_RATE = 9600; // BaudRate. Change this value if you need
     public static boolean SERVICE_CONNECTED = false;
 
     private IBinder binder = new UsbBinder();
@@ -59,16 +58,9 @@ public class UsbService extends Service {
     private UsbSerialInterface.UsbReadCallback mCallback = new UsbSerialInterface.UsbReadCallback() {
         @Override
         public void onReceivedData(byte[] arg0) {
-//            try {
-//                String data = new String(arg0, "UTF-8");
-//                if (mHandler != null)
-//                    mHandler.obtainMessage(MESSAGE_FROM_SERIAL_PORT, data).sendToTarget();
-//            } catch (UnsupportedEncodingException e) {
-//                e.printStackTrace();
-//            }
-            //                String data = new String(arg0, "UTF-8");
-            if (mHandler != null)
+            if (mHandler != null) {
                 mHandler.obtainMessage(MESSAGE_FROM_SERIAL_PORT, arg0).sendToTarget();
+            }
         }
     };
 
@@ -91,16 +83,6 @@ public class UsbService extends Service {
         public void onDSRChanged(boolean state) {
             if(mHandler != null)
                 mHandler.obtainMessage(DSR_CHANGE).sendToTarget();
-        }
-    };
-
-    /***
-     * Check if buffer is overflow
-     */
-    private UsbSerialInterface.UsbOverrunCallback overrunCallback = new UsbSerialInterface.UsbOverrunCallback() {
-        @Override
-        public void onOverrunError() {
-            SystemClock.sleep(5000);
         }
     };
 
@@ -180,7 +162,6 @@ public class UsbService extends Service {
         if (serialPort != null) {
             serialPort.write(data);
         }
-
     }
 
     public void setHandler(Handler mHandler) {
@@ -268,7 +249,6 @@ public class UsbService extends Service {
                     serialPort.read(mCallback);
                     serialPort.getCTS(ctsCallback);
                     serialPort.getDSR(dsrCallback);
-                    serialPort.getOverrun(overrunCallback);
 
                     //
                     // Some Arduinos would need some sleep because firmware wait some time to know whether a new sketch is going

@@ -9,7 +9,6 @@
         android:layout_height="wrap_content"
         android:layout_centerInParent="true"
         android:layout_marginStart="@dimen/fab_margin"
-        android:textColor="@android:color/black"
-        android:text="he"/>
+        android:textColor="@android:color/holo_green_light"/>
 
 </RelativeLayout>
